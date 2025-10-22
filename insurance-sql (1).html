@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Insurance Manager</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.2/sql-wasm.js"></script>
+  <style>
+    :root {
+      --primary: #2c3e50;
+      --accent: #3498db;
+      --danger: #e74c3c;
+      --bg: #f9f9f9;
+      --card: #ffffff;
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: var(--bg);
+      margin: 0;
+      padding: 0;
+    }
+
+    nav {
+      background-color: var(--primary);
+      padding: 10px 20px;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    nav a {
+      color: white;
+      margin-right: 15px;
+      text-decoration: none;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 30px auto;
+      padding: 20px;
+      background-color: var(--card);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      border-radius: 8px;
+    }
+
+    h1, h2 {
+      color: var(--primary);
+      text-align: center;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+
+    button {
+      background-color: var(--accent);
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    .danger {
+      background-color: var(--danger);
+    }
+
+    .danger:hover {
+      background-color: #c0392b;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #ecf0f1;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div>Insurance Manager</div>
+    <div>
+      <a onclick="showPage('home')">Home</a>
+      <a onclick="showPage('login')">Login</a>
+      <a onclick="showPage('create')">Create Account</a>
+      <a onclick="showPage('manager')">Manage Plans</a>
+    </div>
+  </nav>
+
+  <div id="home" class="container">
+    <h1>Welcome</h1>
+    <p>Manage insurance plans with ease. Use the navigation above to get started.</p>
+  </div>
+
+  <div id="login" class="container hidden">
+    <h2>Login</h2>
+    <input type="text" id="loginUser" placeholder="Username" />
+    <input type="password" id="loginPass" placeholder="Password" />
+    <button onclick="login()">Login</button>
+  </div>
+
+  <div id="create" class="container hidden">
+    <h2>Create Account</h2>
+    <input type="text" id="newUser" placeholder="Username" />
+    <input type="password" id="newPass" placeholder="Password" />
+    <button onclick="createAccount()">Create</button>
+  </div>
+
+  <div id="manager" class="container hidden">
+    <h2>Insurance Plans</h2>
+    <input type="text" id="name" placeholder="Customer Name" />
+    <select id="plan">
+      <option value="">Select Plan</option>
+      <option value="Basic">Basic</option>
+      <option value="Premium">Premium</option>
+      <option value="Gold">Gold</option>
+    </select>
+    <input type="number" id="amount" placeholder="Amount Paid ($)" />
+    <button onclick="addOrUpdateEntry()">Add</button>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Plan</th>
+          <th>Amount</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="dataTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    let db, editingId = null;
+    const users = [];
+
+    initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.2/${file}` })
+      .then(SQL => {
+        db = new SQL.Database();
+        db.run(`CREATE TABLE insurance (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, plan TEXT, amount REAL);`);
+        renderTable();
+      });
+
+    function showPage(id) {
+      ['home', 'login', 'create', 'manager'].forEach(p => {
+        document.getElementById(p).classList.add('hidden');
+      });
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function createAccount() {
+      const user = document.getElementById("newUser").value.trim();
+      const pass = document.getElementById("newPass").value;
+      if (!user || !pass) return alert("Fill out all fields.");
+      users.push({ user, pass });
+      alert("Account created!");
+      showPage('login');
+    }
+
+    function login() {
+      const user = document.getElementById("loginUser").value.trim();
+      const pass = document.getElementById("loginPass").value;
+      const found = users.find(u => u.user === user && u.pass === pass);
+      if (found) {
+        alert("Login successful!");
+        showPage('manager');
+      } else {
+        alert("Invalid credentials.");
+      }
+    }
+
+    function addOrUpdateEntry() {
+      const name = document.getElementById("name").value.trim();
+      const plan = document.getElementById("plan").value;
+      const amount = parseFloat(document.getElementById("amount").value);
+      if (!name || !plan || isNaN(amount)) return alert("Fill out all fields.");
+
+      if (editingId === null) {
+        db.run("INSERT INTO insurance (name, plan, amount) VALUES (?, ?, ?);", [name, plan, amount]);
+      } else {
+        db.run("UPDATE insurance SET name = ?, plan = ?, amount = ? WHERE id = ?;", [name, plan, amount, editingId]);
+        editingId = null;
+        document.querySelector("button[onclick='addOrUpdateEntry()']").textContent = "Add";
+      }
+
+      renderTable();
+      clearForm();
+    }
+
+    function renderTable() {
+      const result = db.exec("SELECT * FROM insurance;");
+      const tbody = document.getElementById("dataTable");
+      tbody.innerHTML = "";
+
+      if (result.length === 0) return;
+
+      const rows = result[0].values;
+      rows.forEach(row => {
+        const [id, name, plan, amount] = row;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${name}</td>
+          <td>${plan}</td>
+          <td>$${amount}</td>
+          <td>
+            <button onclick="editEntry(${id})">Edit</button>
+            <button class="danger" onclick="deleteEntry(${id})">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function editEntry(id) {
+      const result = db.exec("SELECT * FROM insurance WHERE id = ?;", [id]);
+      if (result.length === 0) return;
+
+      const [row] = result[0].values;
+      editingId = row[0];
+      document.getElementById("name").value = row[1];
+      document.getElementById("plan").value = row[2];
+      document.getElementById("amount").value = row[3];
+      document.querySelector("button[onclick='addOrUpdateEntry()']").textContent = "Update";
+    }
+
+    function deleteEntry(id) {
+      db.run("DELETE FROM insurance WHERE id = ?;", [id]);
+      renderTable();
+    }
+
+    function clearForm() {
+      document.getElementById("name").value = "";
+      document.getElementById("plan").value = "";
+      document.getElementById("amount").value = "";
+    }
+
+    showPage('home');
+  </script>
+</body>
+</html>
